@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Scan Paket Kurir</title>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: 'Segoe UI', sans-serif; background: #f4f4f4; margin: 0; padding: 20px; }
+    .section { display: none; max-width: 700px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 0 8px rgba(0,0,0,0.1); }
+    .active { display: block; }
+    input, button { width: 100%; padding: 10px; margin: 8px 0; border-radius: 5px; border: 1px solid #ccc; font-size: 16px; }
+    button { background: #1e40af; color: white; font-weight: bold; cursor: pointer; }
+    button:hover { background: #1d4ed8; }
+    #barcodeList .item { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #eee; }
+    .delete { background: red; color: white; border: none; padding: 5px 10px; border-radius: 4px; font-size: 12px; }
+    .status-box { padding: 3px 6px; border-radius: 4px; font-size: 12px; margin-left: 8px; display: inline-block; }
+    .status-proses { background-color: red; color: white; }
+    .status-terkirim { background-color: green; color: white; }
+  </style>
+</head>
+<body>
+
+<!-- Page 1 -->
+<div id="page1" class="section active">
+  <h2>Login Kurir</h2>
+  <input id="id" placeholder="ID Mitra">
+  <input id="nama" placeholder="Nama Lengkap">
+  <input id="nik" placeholder="NIK (16 digit)" maxlength="16" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+  <button onclick="goToPage2()">Masuk</button>
+</div>
+
+<!-- Page 2 -->
+<div id="page2" class="section">
+  <h2>Data Paket Dibawa</h2>
+  <input id="jumlah" type="number" placeholder="Jumlah Paket">
+  <input id="cod" type="number" placeholder="Jumlah Paket COD">
+  <input id="noncod" type="number" placeholder="Jumlah Paket NON COD">
+  <div id="reader" style="width: 100%; max-width: 400px; margin: auto;"></div>
+  <div id="barcodeList"></div>
+  <button onclick="goToPage3()">Lanjut</button>
+</div>
+
+<!-- Page 3 -->
+<div id="page3" class="section">
+  <h2>Upload Foto Tiap Paket</h2>
+  <div id="fotoList"></div>
+  <button onclick="goToPage4()">Lanjut</button>
+</div>
+
+<!-- Page 4 -->
+<div id="page4" class="section">
+  <h2>Pending Paket</h2>
+  <div id="pendingList"></div>
+  <button onclick="goToPage5()">Selesai</button>
+</div>
+
+<!-- Page 5 -->
+<div id="page5" class="section">
+  <h2>Ringkasan</h2>
+  <canvas id="summaryChart" width="300" height="300"></canvas>
+</div>
+
+<script>
+const pages = ['page1', 'page2', 'page3', 'page4', 'page5'];
+const data = { barcodes: [], foto: {} };
+const scanned = new Set();
+
+function showPage(n) {
+  pages.forEach((p, i) => document.getElementById(p).classList.toggle('active', i === n));
+}
+
+function goToPage2() {
+  const nik = document.getElementById('nik').value;
+  if (nik.length !== 16) return alert("NIK harus 16 digit angka!");
+  showPage(1);
+}
+
+function validateJumlahPaket() {
+  const jumlah = parseInt(document.getElementById('jumlah').value) || 0;
+  const cod = parseInt(document.getElementById('cod').value) || 0;
+  const noncod = parseInt(document.getElementById('noncod').value) || 0;
+  if (cod + noncod !== jumlah) {
+    alert("Jumlah COD dan NON COD harus sama dengan total jumlah paket.");
+    return false;
+  }
+  return true;
+}
+
+function goToPage3() {
+  if (!validateJumlahPaket()) return;
+  const jumlahPaket = parseInt(document.getElementById('jumlah').value) || 0;
+  if (data.barcodes.length !== jumlahPaket) {
+    alert(`Jumlah barcode yang dipindai (${data.barcodes.length}) harus sama dengan jumlah paket (${jumlahPaket}).`);
+    return;
+  }
+  const fotoList = document.getElementById('fotoList');
+  fotoList.innerHTML = '';
+  data.barcodes.forEach(barcode => {
+    const div = document.createElement('div');
+    div.innerHTML = `<p>${barcode} <span id='status-${barcode}' class='status-box status-proses'>Proses</span></p><input type='file' accept='image/*' onchange='uploadFoto("${barcode}", this)'>`;
+    fotoList.appendChild(div);
+  });
+  showPage(2);
+}
+
+function goToPage4() {
+  const pending = data.barcodes.filter(b => !data.foto[b]);
+  const list = document.getElementById('pendingList');
+  list.innerHTML = '';
+  pending.forEach(barcode => {
+    const div = document.createElement('div');
+    div.innerHTML = `<p>${barcode} <span class='status-box status-proses'>Pending</span></p><input type='file' accept='image/*'>`;
+    list.appendChild(div);
+  });
+  showPage(3);
+}
+
+function goToPage5() {
+  const total = data.barcodes.length;
+  const terkirim = Object.keys(data.foto).length;
+  const pending = total - terkirim;
+  showPage(4);
+  renderSummaryChart(terkirim, pending);
+  kirimKeSheets();
+}
+
+function renderSummaryChart(terkirim, pending) {
+  const ctx = document.getElementById('summaryChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Terkirim', 'Pending'],
+      datasets: [{ data: [terkirim, pending], backgroundColor: ['green', 'red'] }]
+    },
+    options: { responsive: false, plugins: { legend: { position: 'bottom' } } }
+  });
+}
+
+function uploadFoto(barcode, input) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    data.foto[barcode] = reader.result;
+    const status = document.getElementById(`status-${barcode}`);
+    if (status) {
+      status.textContent = 'Terkirim';
+      status.classList.remove('status-proses');
+      status.classList.add('status-terkirim');
+    }
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+
+function kirimKeSheets() {
+  const payload = {
+    id: document.getElementById('id').value,
+    nama: document.getElementById('nama').value,
+    nik: document.getElementById('nik').value,
+    cod: parseInt(document.getElementById('cod').value) || 0,
+    noncod: parseInt(document.getElementById('noncod').value) || 0,
+    barcodes: data.barcodes,
+    foto: data.foto
+  };
+
+  fetch("https://script.google.com/macros/s/AKfycbxQAiWeo_AnhUYqfdB5Fxa903vwnVoYLV4Ao1ZdcLyL4Zayge4J_CEAEXQ2eVhaeWS8/exec", {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    headers: { "Content-Type": "application/json" }
+  })
+  .then(res => res.text())
+  .then(msg => alert("✅ Data berhasil dikirim!\n" + msg))
+  .catch(err => alert("❌ Gagal kirim ke Spreadsheet: " + err));
+}
+
+function renderBarcodes() {
+  const container = document.getElementById('barcodeList');
+  container.innerHTML = '';
+  scanned.forEach(code => {
+    const div = document.createElement('div');
+    div.className = 'item';
+    div.innerHTML = `<span>${code}</span><button class='delete' onclick='removeBarcode("${code}")'>Hapus</button>`;
+    container.appendChild(div);
+  });
+  const count = document.createElement('p');
+  count.textContent = `Total Barcode: ${scanned.size}`;
+  container.appendChild(count);
+  data.barcodes = Array.from(scanned);
+}
+
+function removeBarcode(code) {
+  scanned.delete(code);
+  renderBarcodes();
+}
+
+const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+scanner.render(text => {
+  if (!scanned.has(text)) {
+    scanned.add(text);
+    renderBarcodes();
+  } else {
+    alert("Barcode sudah dipindai sebelumnya!");
+  }
+});
+</script>
+</body>
+</html>
