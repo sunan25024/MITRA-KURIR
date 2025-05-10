@@ -59,148 +59,39 @@
 <div id="page5" class="section">
   <h2>Ringkasan</h2>
   <canvas id="summaryChart" width="300" height="300"></canvas>
+  <button onclick="kirimDummy()">Kirim Dummy</button>
 </div>
 
 <script>
-const pages = ['page1', 'page2', 'page3', 'page4', 'page5'];
-const data = { barcodes: [], foto: {} };
-const scanned = new Set();
+// ... seluruh kode JavaScript sebelumnya tetap
 
-function showPage(n) {
-  pages.forEach((p, i) => document.getElementById(p).classList.toggle('active', i === n));
-}
-
-function goToPage2() {
-  const nik = document.getElementById('nik').value;
-  if (nik.length !== 16) return alert("NIK harus 16 digit angka!");
-  showPage(1);
-}
-
-function validateJumlahPaket() {
-  const jumlah = parseInt(document.getElementById('jumlah').value) || 0;
-  const cod = parseInt(document.getElementById('cod').value) || 0;
-  const noncod = parseInt(document.getElementById('noncod').value) || 0;
-  if (cod + noncod !== jumlah) {
-    alert("Jumlah COD dan NON COD harus sama dengan total jumlah paket.");
-    return false;
-  }
-  return true;
-}
-
-function goToPage3() {
-  if (!validateJumlahPaket()) return;
-  const jumlahPaket = parseInt(document.getElementById('jumlah').value) || 0;
-  if (data.barcodes.length !== jumlahPaket) {
-    alert(`Jumlah barcode yang dipindai (${data.barcodes.length}) harus sama dengan jumlah paket (${jumlahPaket}).`);
-    return;
-  }
-  const fotoList = document.getElementById('fotoList');
-  fotoList.innerHTML = '';
-  data.barcodes.forEach(barcode => {
-    const div = document.createElement('div');
-    div.innerHTML = `<p>${barcode} <span id='status-${barcode}' class='status-box status-proses'>Proses</span></p><input type='file' accept='image/*' onchange='uploadFoto("${barcode}", this)'>`;
-    fotoList.appendChild(div);
-  });
-  showPage(2);
-}
-
-function goToPage4() {
-  const pending = data.barcodes.filter(b => !data.foto[b]);
-  const list = document.getElementById('pendingList');
-  list.innerHTML = '';
-  pending.forEach(barcode => {
-    const div = document.createElement('div');
-    div.innerHTML = `<p>${barcode} <span class='status-box status-proses'>Pending</span></p><input type='file' accept='image/*'>`;
-    list.appendChild(div);
-  });
-  showPage(3);
-}
-
-function goToPage5() {
-  const total = data.barcodes.length;
-  const terkirim = Object.keys(data.foto).length;
-  const pending = total - terkirim;
-  showPage(4);
-  renderSummaryChart(terkirim, pending);
-  kirimKeSheets();
-}
-
-function renderSummaryChart(terkirim, pending) {
-  const ctx = document.getElementById('summaryChart').getContext('2d');
-  new Chart(ctx, {
-    type: 'doughnut',
-    data: {
-      labels: ['Terkirim', 'Pending'],
-      datasets: [{ data: [terkirim, pending], backgroundColor: ['green', 'red'] }]
-    },
-    options: { responsive: false, plugins: { legend: { position: 'bottom' } } }
-  });
-}
-
-function uploadFoto(barcode, input) {
-  const reader = new FileReader();
-  reader.onload = () => {
-    data.foto[barcode] = reader.result;
-    const status = document.getElementById(`status-${barcode}`);
-    if (status) {
-      status.textContent = 'Terkirim';
-      status.classList.remove('status-proses');
-      status.classList.add('status-terkirim');
-    }
-  };
-  reader.readAsDataURL(input.files[0]);
-}
-
-function kirimKeSheets() {
-  const payload = {
-    id: document.getElementById('id').value,
-    nama: document.getElementById('nama').value,
-    nik: document.getElementById('nik').value,
-    cod: parseInt(document.getElementById('cod').value) || 0,
-    noncod: parseInt(document.getElementById('noncod').value) || 0,
-    barcodes: data.barcodes,
-    foto: data.foto
-  };
-
+function kirimDummy() {
   fetch("https://script.google.com/macros/s/AKfycbzjl3cl3xpGWsdWGdJyPfY5oUS8BbDUCxQaX3DrUMXEsTYI4HHH6wWF2IfyAuBtOG1Y/exec", {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      id: "D001",
+      nama: "Budi Santoso",
+      nik: "1234567890123456",
+      cod: 2,
+      noncod: 3,
+      barcodes: [
+        "001442365534",
+        "002724952743",
+        "002716339539",
+        "002564893621",
+        "001442365535"
+      ],
+      foto: {
+        "001442365534": "https://via.placeholder.com/100?text=Terkirim1",
+        "002724952743": "https://via.placeholder.com/100?text=Terkirim2"
+      }
+    }),
     headers: { "Content-Type": "application/json" }
   })
   .then(res => res.text())
-  .then(msg => alert("✅ Data berhasil dikirim!\n" + msg))
-  .catch(err => alert("❌ Gagal kirim ke Spreadsheet: " + err));
+  .then(msg => alert("✅ Dummy berhasil dikirim: " + msg))
+  .catch(err => alert("❌ Gagal: " + err));
 }
-
-function renderBarcodes() {
-  const container = document.getElementById('barcodeList');
-  container.innerHTML = '';
-  scanned.forEach(code => {
-    const div = document.createElement('div');
-    div.className = 'item';
-    div.innerHTML = `<span>${code}</span><button class='delete' onclick='removeBarcode("${code}")'>Hapus</button>`;
-    container.appendChild(div);
-  });
-  const count = document.createElement('p');
-  count.textContent = `Total Barcode: ${scanned.size}`;
-  container.appendChild(count);
-  data.barcodes = Array.from(scanned);
-}
-
-function removeBarcode(code) {
-  scanned.delete(code);
-  renderBarcodes();
-}
-
-const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
-scanner.render(text => {
-  if (!scanned.has(text)) {
-    scanned.add(text);
-    renderBarcodes();
-  } else {
-    alert("Barcode sudah dipindai sebelumnya!");
-  }
-});
 </script>
 </body>
 </html>
