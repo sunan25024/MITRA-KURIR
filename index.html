@@ -71,10 +71,7 @@ function showPage(n) {
 }
 
 function goToPage2() {
-  const id = document.getElementById('id').value;
-  const nama = document.getElementById('nama').value;
   const nik = document.getElementById('nik').value;
-  if (!id || !nama) return alert("ID dan Nama wajib diisi!");
   if (nik.length !== 16) return alert("NIK harus 16 digit angka!");
   showPage(1);
 }
@@ -113,7 +110,7 @@ function goToPage4() {
   list.innerHTML = '';
   pending.forEach(barcode => {
     const div = document.createElement('div');
-    div.innerHTML = `<p>${barcode} <span class='status-box status-proses'>Pending</span></p><input type='file' accept='image/*' onchange='uploadFoto("${barcode}", this)'>`;
+    div.innerHTML = `<p>${barcode} <span class='status-box status-proses'>Pending</span></p><input type='file' accept='image/*'>`;
     list.appendChild(div);
   });
   showPage(3);
@@ -141,36 +138,17 @@ function renderSummaryChart(terkirim, pending) {
 }
 
 function uploadFoto(barcode, input) {
-  const file = input.files[0];
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('barcode', barcode);
-
-  fetch('https://script.google.com/macros/s/AKfycbzQ3F49GAkr2ZTfM8Fy96dwE0ZvFTYH5nAKE-w-ZaEolgHnq0MSW_kOxWsfC28CcQ3mPw/exec', {
-    method: 'POST',
-    body: formData
-  })
-  .then(res => {
-    if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
-    return res.json();
-  })
-  .then(result => {
-    if (result.url) {
-      data.foto[barcode] = result.url; // Simpan URL
-      const status = document.getElementById(`status-${barcode}`);
-      if (status) {
-        status.textContent = 'Terkirim';
-        status.classList.remove('status-proses');
-        status.classList.add('status-terkirim');
-      }
-    } else {
-      throw new Error('Gagal mendapatkan URL foto');
+  const reader = new FileReader();
+  reader.onload = () => {
+    data.foto[barcode] = reader.result;
+    const status = document.getElementById(`status-${barcode}`);
+    if (status) {
+      status.textContent = 'Terkirim';
+      status.classList.remove('status-proses');
+      status.classList.add('status-terkirim');
     }
-  })
-  .catch(err => {
-    console.error('Upload error:', err);
-    alert('Gagal upload foto: ' + err.message);
-  });
+  };
+  reader.readAsDataURL(input.files[0]);
 }
 
 function kirimKeSheets() {
@@ -184,20 +162,14 @@ function kirimKeSheets() {
     foto: data.foto
   };
 
-  fetch('https://script.google.com/macros/s/AKfycbxo-XQo56V0fb1-CxXVEUqrDsHxP_G8lefg_ZnL-BABtaQHKHaQ0wkcxVhQxtAC8mnxtg/exec', {
+  fetch("https://script.google.com/macros/s/AKfycbxiS0eK569K1gKgQzjalNMUeFWGdqrDr_9NLzqP7M7IStKg2DU5CExfgIKXIJN_kPf5/exec", {
     method: 'POST',
     body: JSON.stringify(payload),
-    headers: { 'Content-Type': 'application/json' }
+    headers: { "Content-Type": "application/json" }
   })
-  .then(res => {
-    if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
-    return res.text();
-  })
-  .then(msg => alert('✅ Data berhasil dikirim!\n' + msg))
-  .catch(err => {
-    console.error('Kirim error:', err);
-    alert('❌ Gagal kirim ke Spreadsheet: ' + err.message);
-  });
+  .then(res => res.text())
+  .then(msg => alert("✅ Data berhasil dikirim!\n" + msg))
+  .catch(err => alert("❌ Gagal kirim ke Spreadsheet: " + err));
 }
 
 function renderBarcodes() {
@@ -220,21 +192,15 @@ function removeBarcode(code) {
   renderBarcodes();
 }
 
-const scanner = new Html5QrcodeScanner('reader', { fps: 10, qrbox: 250 });
-scanner.render(
-  text => {
-    if (!scanned.has(text)) {
-      scanned.add(text);
-      renderBarcodes();
-    } else {
-      alert('Barcode sudah dipindai sebelumnya!');
-    }
-  },
-  error => {
-    console.error('Scanner error:', error);
-    alert('Gagal memulai scanner. Pastikan kamera diizinkan.');
+const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+scanner.render(text => {
+  if (!scanned.has(text)) {
+    scanned.add(text);
+    renderBarcodes();
+  } else {
+    alert("Barcode sudah dipindai sebelumnya!");
   }
-);
+});
 </script>
 </body>
 </html>
